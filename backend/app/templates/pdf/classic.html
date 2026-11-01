@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Georgia, 'Times New Roman', serif; font-size: 10pt; color: #222; background: #fff; }
+  .page { padding: 40px 48px; }
+
+  /* Header */
+  .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #222; padding-bottom: 14px; }
+  .header h1 { font-size: 20pt; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+  .contact { margin-top: 6px; font-size: 8.5pt; color: #444; }
+  .contact span { margin: 0 8px; }
+
+  /* Summary */
+  .summary { margin-bottom: 18px; font-size: 9.5pt; line-height: 1.6; color: #333; }
+
+  /* Section */
+  .section { margin-bottom: 18px; }
+  .section-title {
+    font-size: 10.5pt; font-weight: bold; text-transform: uppercase;
+    letter-spacing: 1.5px; border-bottom: 1px solid #888; padding-bottom: 4px; margin-bottom: 10px;
+  }
+
+  .exp-item { margin-bottom: 12px; }
+  .exp-header { display: flex; justify-content: space-between; }
+  .exp-role { font-weight: bold; }
+  .exp-date { font-size: 9pt; font-style: italic; }
+  .exp-company { font-style: italic; color: #444; font-size: 9.5pt; }
+  ul.bullets { padding-left: 18px; margin-top: 4px; }
+  ul.bullets li { font-size: 9pt; margin-bottom: 3px; line-height: 1.5; }
+
+  .edu-item { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .edu-school { font-weight: bold; }
+  .edu-degree { font-style: italic; font-size: 9pt; color: #444; }
+
+  .skills-list { font-size: 9pt; line-height: 1.7; }
+  .skill-cat { font-weight: bold; }
+
+  .proj-item { margin-bottom: 10px; }
+  .proj-name { font-weight: bold; }
+  .proj-desc { font-size: 9pt; margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <h1>{{ personal_info.get('full_name', 'Your Name') }}</h1>
+    <div class="contact">
+      {% if personal_info.get('email') %}<span>{{ personal_info.email }}</span>{% endif %}
+      {% if personal_info.get('phone') %}<span>{{ personal_info.phone }}</span>{% endif %}
+      {% if personal_info.get('location') %}<span>{{ personal_info.location }}</span>{% endif %}
+      {% if personal_info.get('linkedin') %}<span>{{ personal_info.linkedin }}</span>{% endif %}
+      {% if personal_info.get('github') %}<span>{{ personal_info.github }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if personal_info.get('summary') %}
+  <div class="section">
+    <div class="section-title">Professional Summary</div>
+    <div class="summary">{{ personal_info.summary }}</div>
+  </div>
+  {% endif %}
+
+  {% if sections.get('experience') and sections.experience.content %}
+  <div class="section">
+    <div class="section-title">{{ sections.experience.title }}</div>
+    {% for exp in sections.experience.content %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="exp-role">{{ exp.get('role', '') }}{% if exp.get('company') %}, <span class="exp-company">{{ exp.company }}</span>{% endif %}</span>
+        <span class="exp-date">{{ exp.get('start_date','') }}{% if exp.get('end_date') %} – {{ exp.end_date }}{% endif %}</span>
+      </div>
+      {% if exp.get('bullets') %}
+      <ul class="bullets">
+        {% for b in exp.bullets %}<li>{{ b }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if sections.get('education') and sections.education.content %}
+  <div class="section">
+    <div class="section-title">{{ sections.education.title }}</div>
+    {% for edu in sections.education.content %}
+    <div class="edu-item">
+      <div>
+        <div class="edu-school">{{ edu.get('school', '') }}</div>
+        <div class="edu-degree">{{ edu.get('degree', '') }}{% if edu.get('field') %} in {{ edu.field }}{% endif %}</div>
+      </div>
+      <div>{{ edu.get('graduation_year', '') }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if sections.get('skills') and sections.skills.content %}
+  <div class="section">
+    <div class="section-title">{{ sections.skills.title }}</div>
+    <div class="skills-list">
+      {% for cat in sections.skills.content %}
+      <div><span class="skill-cat">{% if cat.get('category') %}{{ cat.category }}: {% endif %}</span>{{ cat.get('skills', []) | join(', ') }}</div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if sections.get('projects') and sections.projects.content %}
+  <div class="section">
+    <div class="section-title">{{ sections.projects.title }}</div>
+    {% for proj in sections.projects.content %}
+    <div class="proj-item">
+      <div class="proj-name">{{ proj.get('name','') }}</div>
+      {% if proj.get('description') %}<div class="proj-desc">{{ proj.description }}</div>{% endif %}
+      {% if proj.get('technologies') %}<div class="proj-desc" style="font-style:italic">{{ proj.technologies | join(', ') }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>
