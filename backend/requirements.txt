@@ -18,3 +18,4 @@ weasyprint==61.2
 Pillow==10.3.0
 aiofiles==23.2.1
 python-slugify==8.0.4
+itsdangerous>=2.2.0,<3.0.0
