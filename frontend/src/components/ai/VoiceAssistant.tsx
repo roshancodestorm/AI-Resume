@@ -1,10 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Mic, MicOff, X, Send, User, Bot, Sparkles, Check, Trash2, Volume2, VolumeX, Search, Globe, ChevronDown } from 'lucide-react'
-import { coachChat, applyCoachSection, CoachChatResponse, coachTTS } from '../../api/ai'
+
+import { useState, useEffect, useRef } from 'react'
+import {
+  Mic, MicOff, X, Send, User, Bot, Sparkles, Check, Trash2,
+  Volume2, VolumeX, Search, Globe, ChevronDown
+} from 'lucide-react'
+import {
+  coachChat,
+  applyCoachSection,
+  CoachChatResponse,
+  coachTTS
+} from '../../api/ai'
 import toast from 'react-hot-toast'
 import { useParams } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { SUPPORTED_LANGUAGES, Language } from '../../constants/languages'
+import { SUPPORTED_LANGUAGES } from '../../constants/languages'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface Message {
@@ -16,13 +25,9 @@ export default function VoiceAssistant() {
   const { isAuthenticated, isLoading: authLoading } = useAuth()
   const { id: resumeId } = useParams<{ id: string }>()
 
-  if (authLoading || !isAuthenticated) {
-    return null
-  }
-
   const [isOpen, setIsOpen] = useState(false)
   const [isListening, setIsListening] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [, setIsSpeaking] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -34,20 +39,24 @@ export default function VoiceAssistant() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<any>(null)
-  const synthRef = useRef<SpeechSynthesis | null>(window.speechSynthesis)
-  const autoStopTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const synthRef = useRef<SpeechSynthesis | null>(
+    typeof window !== 'undefined' ? window.speechSynthesis : null
+  )
+  const autoStopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isExplicitlyStopped = useRef<boolean>(true)
 
-  // Auto-stop microphone after 2 minutes
   const startAutoStopTimer = () => {
-    if (autoStopTimeoutRef.current) clearTimeout(autoStopTimeoutRef.current)
+    if (autoStopTimeoutRef.current) {
+      clearTimeout(autoStopTimeoutRef.current)
+    }
+
     autoStopTimeoutRef.current = setTimeout(() => {
       console.log('Auto-stopping mic after 2 minutes')
       isExplicitlyStopped.current = true
       recognitionRef.current?.stop()
       setIsListening(false)
       toast.success('Mic auto-stopped after 2 minutes to save battery.')
-    }, 120000) // 2 minutes
+    }, 120000)
   }
 
   useEffect(() => {
@@ -56,19 +65,21 @@ export default function VoiceAssistant() {
     }
   }, [messages])
 
-  // Initialize Speech Recognition
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition
+
     if (!SpeechRecognition) {
       console.warn('Speech recognition not supported in this browser')
       return
     }
-    
+
     if (!recognitionRef.current) {
       recognitionRef.current = new SpeechRecognition()
       recognitionRef.current.continuous = true
       recognitionRef.current.interimResults = true
-      
+
       recognitionRef.current.onstart = () => {
         console.log('Voice recognition started')
         setIsListening(true)
@@ -76,15 +87,15 @@ export default function VoiceAssistant() {
 
       recognitionRef.current.onresult = (event: any) => {
         let interimTranscript = ''
-        let finalTranscript = ''
 
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
-            finalTranscript = event.results[i][0].transcript
-           if (finalTranscript.trim()) {
+            const finalTranscript = event.results[i][0].transcript
+
+            if (finalTranscript.trim()) {
               console.log('Final transcript chunk:', finalTranscript)
               handleSendMessage(finalTranscript)
-              startAutoStopTimer() // Reset timer on every successful speech input
+              startAutoStopTimer()
             }
           } else {
             interimTranscript += event.results[i][0].transcript
@@ -98,6 +109,7 @@ export default function VoiceAssistant() {
 
       recognitionRef.current.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error)
+
         if (event.error === 'not-allowed') {
           setIsListening(false)
           isExplicitlyStopped.current = true
@@ -108,8 +120,11 @@ export default function VoiceAssistant() {
       }
 
       recognitionRef.current.onend = () => {
-        console.log('Voice recognition ended. Explicitly stopped:', isExplicitlyStopped.current)
-        // If it stopped but not by user or timeout, restart it to keep it active
+        console.log(
+          'Voice recognition ended. Explicitly stopped:',
+          isExplicitlyStopped.current
+        )
+
         if (!isExplicitlyStopped.current) {
           try {
             recognitionRef.current.start()
@@ -123,66 +138,84 @@ export default function VoiceAssistant() {
       }
     }
 
-    // Update language dynamically based on selector
     recognitionRef.current.lang = language
 
     return () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop()
       }
+
       if (autoStopTimeoutRef.current) {
         clearTimeout(autoStopTimeoutRef.current)
       }
     }
   }, [language])
 
+  // Authentication check is after all hooks to keep hook order consistent.
+  if (authLoading || !isAuthenticated) {
+    return null
+  }
+
   const speak = async (text: string) => {
     if (!speechEnabled) return
-    
-    // Stop current speaking
+
     synthRef.current?.cancel()
 
     try {
       const audioBlob = await coachTTS(text)
       const audioUrl = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioUrl)
-      
+
       audio.onplay = () => setIsSpeaking(true)
+
       audio.onended = () => {
         setIsSpeaking(false)
         URL.revokeObjectURL(audioUrl)
       }
-      audio.onerror = () => setIsSpeaking(false)
-      
-      audio.play()
+
+      audio.onerror = () => {
+        setIsSpeaking(false)
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      await audio.play()
     } catch (error) {
       console.error('ElevenLabs TTS failed, falling back to browser:', error)
-      // Fallback to browser synthesis
+
       if (!synthRef.current) return
-      
+
       const utterance = new SpeechSynthesisUtterance(text)
       const voices = synthRef.current.getVoices()
-      
-      const isMarathi = /[क-ह]/.test(text) && (text.includes('आहे') || text.includes('केला') || text.includes('नाही'))
+
+      const isMarathi =
+        /[क-ह]/.test(text) &&
+        (text.includes('आहे') || text.includes('केला') || text.includes('नाही'))
+
       const isHindi = /[क-ह]/.test(text)
-      
-      let targetVoice = null
+
+      let targetVoice: SpeechSynthesisVoice | undefined
+
       if (isMarathi) {
-        targetVoice = voices.find(v => v.lang.includes('mr') || v.lang.includes('hi'))
+        targetVoice = voices.find(
+          v => v.lang.includes('mr') || v.lang.includes('hi')
+        )
         utterance.lang = 'mr-IN'
       } else if (isHindi) {
         targetVoice = voices.find(v => v.lang.includes('hi'))
         utterance.lang = 'hi-IN'
       } else {
-        utterance.lang = language // Use selected language for fallback
-        targetVoice = voices.find(v => v.lang.includes(language.split('-')[0]))
+        utterance.lang = language
+        targetVoice = voices.find(v =>
+          v.lang.includes(language.split('-')[0])
+        )
       }
-      
+
       if (targetVoice) utterance.voice = targetVoice
+
       utterance.onstart = () => setIsSpeaking(true)
       utterance.onend = () => setIsSpeaking(false)
       utterance.onerror = () => setIsSpeaking(false)
-      
+
       synthRef.current.speak(utterance)
     }
   }
@@ -190,21 +223,23 @@ export default function VoiceAssistant() {
   const toggleListening = () => {
     if (isListening) {
       isExplicitlyStopped.current = true
-      if (autoStopTimeoutRef.current) clearTimeout(autoStopTimeoutRef.current)
+
+      if (autoStopTimeoutRef.current) {
+        clearTimeout(autoStopTimeoutRef.current)
+      }
+
       recognitionRef.current?.stop()
     } else {
       if (!recognitionRef.current) {
         toast.error('Speech recognition not supported in this browser.')
         return
       }
-      
+
       isExplicitlyStopped.current = false
       startAutoStopTimer()
-      
-      // Ensure the correct language is set right before starting
       recognitionRef.current.lang = language
-      
-      synthRef.current?.cancel() 
+      synthRef.current?.cancel()
+
       try {
         recognitionRef.current.start()
       } catch (e) {
@@ -218,7 +253,11 @@ export default function VoiceAssistant() {
     const msg = text || inputText
     if (!msg.trim()) return
 
-    const newMessages = [...messages, { role: 'user', content: msg } as Message]
+    const newMessages = [
+      ...messages,
+      { role: 'user', content: msg } as Message
+    ]
+
     setMessages(newMessages)
     setInputText('')
     setIsLoading(true)
@@ -228,11 +267,14 @@ export default function VoiceAssistant() {
         message: msg,
         resume_id: resumeId ? parseInt(resumeId) : undefined,
         conversation_history: messages.slice(-5),
-        preferred_language: language,
+        preferred_language: language
       })
 
-      setMessages([...newMessages, { role: 'assistant', content: response.reply }])
-      
+      setMessages([
+        ...newMessages,
+        { role: 'assistant', content: response.reply }
+      ])
+
       if (response.voice_reply) {
         speak(response.voice_reply)
       }
@@ -251,8 +293,9 @@ export default function VoiceAssistant() {
 
   const handleApplyDraft = async () => {
     if (!resumeId || !currentDraft?.draft_section) return
-    
+
     setIsLoading(true)
+
     try {
       await applyCoachSection(
         parseInt(resumeId),
@@ -260,10 +303,18 @@ export default function VoiceAssistant() {
         currentDraft.draft_section.content,
         currentDraft.draft_section.title
       )
+
       toast.success('Resume updated successfully!')
-      setMessages([...messages, { role: 'assistant', content: 'Maine resume update kar diya hai! ✅' }])
+
+      setMessages([
+        ...messages,
+        {
+          role: 'assistant',
+          content: 'Maine resume update kar diya hai! ✅'
+        }
+      ])
+
       setCurrentDraft(null)
-      // Refresh page to see changes if needed, or trigger global refresh
       window.location.reload()
     } catch (error) {
       toast.error('Failed to update resume')
@@ -272,11 +323,12 @@ export default function VoiceAssistant() {
     }
   }
 
-  const filteredLanguages = SUPPORTED_LANGUAGES.filter(lang => 
+  const filteredLanguages = SUPPORTED_LANGUAGES.filter(lang =>
     lang.name.toLowerCase().includes(langSearchQuery.toLowerCase())
   )
 
-  const selectedLangName = SUPPORTED_LANGUAGES.find(l => l.code === language)?.name || 'English'
+  const selectedLangName =
+    SUPPORTED_LANGUAGES.find(l => l.code === language)?.name || 'English'
 
   if (!isOpen) {
     return (
@@ -294,7 +346,6 @@ export default function VoiceAssistant() {
 
   return (
     <div className="fixed inset-0 md:inset-auto md:bottom-6 md:right-6 md:w-96 md:h-[600px] bg-white md:rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden border border-gray-100">
-      {/* Header */}
       <div className="bg-indigo-600 p-4 text-white flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
@@ -305,22 +356,34 @@ export default function VoiceAssistant() {
             <span className="text-xs text-indigo-100">Active now</span>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => setIsLangListOpen(!isLangListOpen)}
             className="flex items-center gap-1 bg-indigo-700 text-[10px] px-2 py-1 rounded hover:bg-indigo-800 transition-colors"
           >
             <Globe className="w-3 h-3" />
             <span>{selectedLangName}</span>
-            <ChevronDown className={clsx("w-2 h-2 transition-transform", isLangListOpen && "rotate-180")} />
+            <ChevronDown
+              className={clsx(
+                'w-2 h-2 transition-transform',
+                isLangListOpen && 'rotate-180'
+              )}
+            />
           </button>
-          <button 
+
+          <button
             onClick={() => setSpeechEnabled(!speechEnabled)}
             className="p-1.5 hover:bg-white/10 rounded transition-colors"
           >
-            {speechEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            {speechEnabled ? (
+              <Volume2 className="w-4 h-4" />
+            ) : (
+              <VolumeX className="w-4 h-4" />
+            )}
           </button>
-          <button 
+
+          <button
             onClick={() => setIsOpen(false)}
             className="p-1.5 hover:bg-white/10 rounded transition-colors"
           >
@@ -329,7 +392,6 @@ export default function VoiceAssistant() {
         </div>
       </div>
 
-      {/* Language Selection Overlay */}
       {isLangListOpen && (
         <div className="absolute inset-x-0 top-[60px] bottom-0 bg-white z-[60] flex flex-col animate-in slide-in-from-top-4 duration-200">
           <div className="p-4 border-b border-gray-100">
@@ -339,14 +401,15 @@ export default function VoiceAssistant() {
                 type="text"
                 placeholder="Search language..."
                 value={langSearchQuery}
-                onChange={(e) => setLangSearchQuery(e.target.value)}
+                onChange={e => setLangSearchQuery(e.target.value)}
                 className="w-full bg-gray-50 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                 autoFocus
               />
             </div>
           </div>
+
           <div className="flex-1 overflow-y-auto">
-            {filteredLanguages.map((lang) => (
+            {filteredLanguages.map(lang => (
               <button
                 key={lang.code}
                 onClick={() => {
@@ -355,14 +418,16 @@ export default function VoiceAssistant() {
                   setLangSearchQuery('')
                 }}
                 className={clsx(
-                  "w-full px-4 py-3 text-left text-sm hover:bg-gray-50 flex items-center justify-between",
-                  language === lang.code && "text-indigo-600 font-medium bg-indigo-50"
+                  'w-full px-4 py-3 text-left text-sm hover:bg-gray-50 flex items-center justify-between',
+                  language === lang.code &&
+                    'text-indigo-600 font-medium bg-indigo-50'
                 )}
               >
                 {lang.name}
                 {language === lang.code && <Check className="w-4 h-4" />}
               </button>
             ))}
+
             {filteredLanguages.length === 0 && (
               <div className="p-8 text-center text-gray-400 text-sm">
                 No languages found matching "{langSearchQuery}"
@@ -372,28 +437,40 @@ export default function VoiceAssistant() {
         </div>
       )}
 
-      {/* Chat Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50"
+      >
         {messages.length === 0 && (
           <div className="text-center py-8 space-y-4">
             <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
               <Bot className="w-8 h-8" />
             </div>
+
             <div>
-              <p className="text-gray-900 font-medium">Namaste! Main Aura hoon.</p>
+              <p className="text-gray-900 font-medium">
+                Namaste! Main Aura hoon.
+              </p>
               <p className="text-sm text-gray-500 px-8 mt-1">
-                Aap mujhse baat karke resume bana sakte hain ya career advice le sakte hain.
+                Aap mujhse baat karke resume bana sakte hain ya career advice
+                le sakte hain.
               </p>
             </div>
+
             <div className="grid grid-cols-1 gap-2 px-4">
-              <button 
-                onClick={() => handleSendMessage("Suggest targeted job roles for me.")}
+              <button
+                onClick={() =>
+                  handleSendMessage('Suggest targeted job roles for me.')
+                }
                 className="text-xs bg-white border border-gray-200 p-2 rounded-lg hover:border-indigo-300 hover:text-indigo-600 transition-all"
               >
                 "Suggest job roles for me"
               </button>
-              <button 
-                onClick={() => handleSendMessage("Help me add a new project.")}
+
+              <button
+                onClick={() =>
+                  handleSendMessage('Help me add a new project.')
+                }
                 className="text-xs bg-white border border-gray-200 p-2 rounded-lg hover:border-indigo-300 hover:text-indigo-600 transition-all"
               >
                 "Help me add a new project"
@@ -403,18 +480,33 @@ export default function VoiceAssistant() {
         )}
 
         {messages.map((msg, i) => (
-          <div key={i} className={clsx("flex", msg.role === 'user' ? "justify-end" : "justify-start")}>
-            <div className={clsx(
-              "max-w-[85%] p-3 rounded-2xl text-sm shadow-sm",
-              msg.role === 'user' 
-                ? "bg-indigo-600 text-white rounded-tr-none" 
-                : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"
-            )}>
+          <div
+            key={i}
+            className={clsx(
+              'flex',
+              msg.role === 'user' ? 'justify-end' : 'justify-start'
+            )}
+          >
+            <div
+              className={clsx(
+                'max-w-[85%] p-3 rounded-2xl text-sm shadow-sm',
+                msg.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-tr-none'
+                  : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'
+              )}
+            >
               <div className="flex items-center gap-2 mb-1 opacity-70 text-[10px] uppercase tracking-wider font-bold">
-                {msg.role === 'user' ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
+                {msg.role === 'user' ? (
+                  <User className="w-3 h-3" />
+                ) : (
+                  <Bot className="w-3 h-3" />
+                )}
                 {msg.role === 'user' ? 'You' : 'Aura'}
               </div>
-              <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+
+              <p className="whitespace-pre-wrap leading-relaxed">
+                {msg.content}
+              </p>
             </div>
           </div>
         ))}
@@ -429,18 +521,23 @@ export default function VoiceAssistant() {
           </div>
         )}
 
-        {/* Draft Confirmation Card */}
         {currentDraft && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3 animate-in fade-in slide-in-from-bottom-4">
             <div className="flex items-center gap-2 text-amber-800 font-medium text-sm">
               <Sparkles className="w-4 h-4" />
               New Draft Ready
             </div>
+
             <div className="bg-white rounded-lg p-3 border border-amber-100 text-xs text-gray-700 max-h-40 overflow-y-auto">
               <pre className="whitespace-pre-wrap font-sans">
-                {JSON.stringify(currentDraft.draft_section?.content, null, 2)}
+                {JSON.stringify(
+                  currentDraft.draft_section?.content,
+                  null,
+                  2
+                )}
               </pre>
             </div>
+
             <div className="flex gap-2">
               <button
                 onClick={handleApplyDraft}
@@ -448,6 +545,7 @@ export default function VoiceAssistant() {
               >
                 <Check className="w-4 h-4" /> Save to Resume
               </button>
+
               <button
                 onClick={() => setCurrentDraft(null)}
                 className="px-3 bg-white border border-amber-200 text-amber-700 rounded-lg hover:bg-amber-100 transition-colors"
@@ -459,27 +557,32 @@ export default function VoiceAssistant() {
         )}
       </div>
 
-      {/* Input Area */}
       <div className="p-4 bg-white border-t border-gray-100">
         <div className="flex items-center gap-2">
           <button
             onClick={toggleListening}
             className={clsx(
-              "w-10 h-10 rounded-full flex items-center justify-center transition-all",
-              isListening 
-                ? "bg-red-100 text-red-600 animate-pulse" 
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              'w-10 h-10 rounded-full flex items-center justify-center transition-all',
+              isListening
+                ? 'bg-red-100 text-red-600 animate-pulse'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             )}
           >
-            {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            {isListening ? (
+              <MicOff className="w-5 h-5" />
+            ) : (
+              <Mic className="w-5 h-5" />
+            )}
           </button>
-          
+
           <input
             type="text"
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage(inputText)}
-            placeholder={isListening ? "Listening..." : "Type or speak..."}
+            onChange={e => setInputText(e.target.value)}
+            onKeyPress={e =>
+              e.key === 'Enter' && handleSendMessage(inputText)
+            }
+            placeholder={isListening ? 'Listening...' : 'Type or speak...'}
             className="flex-1 bg-gray-100 border-none rounded-full px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
           />
 
@@ -491,6 +594,7 @@ export default function VoiceAssistant() {
             <Send className="w-4 h-4" />
           </button>
         </div>
+
         {isListening && (
           <p className="text-[10px] text-center mt-2 text-gray-400 animate-pulse">
             Aura is listening... Go ahead and speak!
