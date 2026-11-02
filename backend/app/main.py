@@ -21,16 +21,21 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:5173"],
+    allow_origins=[
+        settings.FRONTEND_URL,
+        "http://localhost:5173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Session middleware
+# Session Middleware - Google OAuth Session Fix
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
+    same_site="lax",
+    https_only=settings.ENVIRONMENT.lower() == "production",
 )
 
 # Routers
@@ -49,7 +54,10 @@ def on_startup():
 
 @app.get("/health", tags=["health"])
 def health_check():
-    return {"status": "ok", "app": settings.APP_NAME}
+    return {
+        "status": "ok",
+        "app": settings.APP_NAME,
+    }
 
 
 @app.get("/", tags=["root"])
