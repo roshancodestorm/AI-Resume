@@ -1,11 +1,12 @@
+
 {
   "name": "ai-resume-frontend",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": ".\\node_modules\\.bin\\vite.cmd",
-    "build": ".\\node_modules\\.bin\\tsc.cmd && .\\node_modules\\.bin\\vite.cmd build",
-    "preview": ".\\node_modules\\.bin\\vite.cmd preview",
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
